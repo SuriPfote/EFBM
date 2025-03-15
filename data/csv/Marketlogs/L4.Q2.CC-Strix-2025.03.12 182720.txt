@@ -1,0 +1,2 @@
+price,volRemaining,typeID,range,orderID,volEntered,minVolume,bid,issueDate,duration,stationID,regionID,solarSystemID,jumps,
+1440000.0,1.0,82428,32767,2203068877,1,1,False,2025-03-11 21:51:02.000,90,60000037,10000168,30020628,2147483647,

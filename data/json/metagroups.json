@@ -1,0 +1,168 @@
+{
+    "14": {
+        "iconID": 24151,
+        "iconSuffix": "t3",
+        "nameID": "Tech III"
+    },
+    "70": {
+        "iconID": 25739,
+        "nameID": "Prototype"
+    },
+    "84": {
+        "iconID": 25751,
+        "nameID": "Legendary Exotic Value 4"
+    },
+    "1": {
+        "nameID": "Tech I"
+    },
+    "15": {
+        "iconID": 24152,
+        "iconSuffix": "abyssal",
+        "nameID": "Abyssal"
+    },
+    "71": {
+        "iconID": 25740,
+        "nameID": "Elite Value 13"
+    },
+    "2": {
+        "iconID": 24150,
+        "iconSuffix": "t2",
+        "nameID": "Tech II"
+    },
+    "58": {
+        "iconID": 25727,
+        "nameID": "Basic"
+    },
+    "72": {
+        "iconID": 25741,
+        "nameID": "High Elite Value 14"
+    },
+    "3": {
+        "iconID": 24147,
+        "iconSuffix": "storyline",
+        "nameID": "Storyline"
+    },
+    "17": {
+        "descriptionID": 317894,
+        "iconID": 24153,
+        "iconSuffix": "premium",
+        "nameID": "Premium"
+    },
+    "59": {
+        "iconID": 25728,
+        "nameID": "Minimal Value 1"
+    },
+    "73": {
+        "iconID": 25742,
+        "nameID": "Top-tier Value 15"
+    },
+    "4": {
+        "iconID": 24146,
+        "iconSuffix": "faction",
+        "nameID": "Faction"
+    },
+    "60": {
+        "iconID": 25729,
+        "nameID": "Lesser Value 2"
+    },
+    "5": {
+        "iconID": 24149,
+        "iconSuffix": "officer",
+        "nameID": "Officer"
+    },
+    "19": {
+        "descriptionID": 317896,
+        "iconID": 24154,
+        "iconSuffix": "limited",
+        "nameID": "Limited Time"
+    },
+    "61": {
+        "iconID": 25730,
+        "nameID": "Subpar Value 3"
+    },
+    "75": {
+        "iconID": 25743,
+        "nameID": "Experimental"
+    },
+    "6": {
+        "descriptionID": 66671,
+        "iconID": 24148,
+        "iconSuffix": "deadspace",
+        "nameID": "Deadspace"
+    },
+    "62": {
+        "iconID": 25731,
+        "nameID": "Standard"
+    },
+    "63": {
+        "iconID": 25732,
+        "nameID": "Enhanced Value 5"
+    },
+    "77": {
+        "iconID": 25744,
+        "nameID": "Unique Value 17"
+    },
+    "64": {
+        "iconID": 25733,
+        "nameID": "Notable Value 6"
+    },
+    "78": {
+        "iconID": 25745,
+        "nameID": "Near Legendary Value 18"
+    },
+    "65": {
+        "iconID": 25734,
+        "nameID": "Superior Value 7"
+    },
+    "79": {
+        "iconID": 25746,
+        "nameID": "Legendary Value 19"
+    },
+    "52": {
+        "iconID": 24155,
+        "iconSuffix": "struct_faction",
+        "nameID": "Structure Faction"
+    },
+    "66": {
+        "iconID": 25735,
+        "nameID": "Enhanced"
+    },
+    "80": {
+        "iconID": 25747,
+        "nameID": "Exotic"
+    },
+    "53": {
+        "iconID": 24156,
+        "iconSuffix": "struct_t2",
+        "nameID": "Structure Tech II"
+    },
+    "67": {
+        "iconID": 25736,
+        "nameID": "Exceptional Value 9"
+    },
+    "81": {
+        "iconID": 25748,
+        "nameID": "Exotic Value 1"
+    },
+    "54": {
+        "iconID": 24157,
+        "iconSuffix": "struct",
+        "nameID": "Structure Tech I"
+    },
+    "68": {
+        "iconID": 25737,
+        "nameID": "Outstanding Value 10"
+    },
+    "82": {
+        "iconID": 25749,
+        "nameID": "Advanced Exotic Value 2"
+    },
+    "69": {
+        "iconID": 25738,
+        "nameID": " Rare Value 11"
+    },
+    "83": {
+        "iconID": 25750,
+        "nameID": "Elite Exotic Value 3"
+    }
+}
