@@ -9,6 +9,16 @@ This document outlines the development roadmap for the EVE Frontier Blueprint Mi
 - ✅ Database models implemented and tested
 - ✅ Basic UI framework with placeholder tabs
 - ✅ Package setup for installation
+- ✅ GitHub repository setup with foundation branch
+
+## Version Control and Collaboration
+
+- ✅ GitHub repository created at [https://github.com/SuriPfote/EFBM](https://github.com/SuriPfote/EFBM)
+- ✅ Foundation branch established to preserve baseline implementation
+- ✅ Documentation updated with contribution guidelines
+- [ ] Create project wiki with development guidelines
+- [ ] Set up GitHub Actions for automated testing
+- [ ] Implement issue templates for bug reports and feature requests
 
 ## Milestone 1: UI Implementation (Target: v0.2.0)
 

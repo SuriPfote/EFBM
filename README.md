@@ -14,6 +14,7 @@ The application is currently in version 0.1.0, with the following components imp
 - Database models for items, blueprints, and market data
 - Basic UI framework with placeholder tabs for the main functionality
 - Comprehensive test suite for the service layer
+- GitHub integration with foundation branch to preserve baseline implementation
 
 See the [CHANGELOG.md](CHANGELOG.md) for detailed information about project history.
 
@@ -39,8 +40,8 @@ See the [CHANGELOG.md](CHANGELOG.md) for detailed information about project hist
 1. Clone the repository:
 
    ```
-   git clone https://github.com/yourusername/eve-frontier-blueprint-miracle.git
-   cd eve-frontier-blueprint-miracle
+   git clone https://github.com/SuriPfote/EFBM.git
+   cd EFBM
    ```
 
 2. Install in development mode:
@@ -56,6 +57,14 @@ See the [CHANGELOG.md](CHANGELOG.md) for detailed information about project hist
    ```
 
 ## Development
+
+### GitHub Repository
+
+The project is hosted on GitHub at [https://github.com/SuriPfote/EFBM](https://github.com/SuriPfote/EFBM).
+
+Key branches:
+- `master`: Main development branch
+- `foundation`: Stable baseline implementation with core functionality
 
 ### Project Structure
 
@@ -107,7 +116,24 @@ python test_services.py
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Here's how to contribute:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Commit your changes (`git commit -m 'Add some amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
+
+For major changes, please open an issue first to discuss what you would like to change.
+
+### Git Workflow
+
+The project follows a feature branch workflow:
+- Create feature branches from `master`
+- Submit pull requests to merge into `master`
+- Tag significant releases with version numbers
+- The `foundation` branch preserves the initial baseline implementation
 
 ## License
 
