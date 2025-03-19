@@ -4,6 +4,7 @@ Configuration module for EVE Frontier Blueprint Miracle.
 This module defines configuration settings for the application using Pydantic.
 """
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -27,7 +28,8 @@ class AppConfig(BaseModel):
     refined_market_data_dir: Path = Path("data/refined_market_data")
     
     # Database settings
-    db_url: str = "sqlite:///eve_frontier.db"
+    # Use an absolute path to the database file
+    db_url: str = f"sqlite:///{os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'eve_frontier.db'))}"
     
     # UI settings
     theme: str = "default"
@@ -44,4 +46,7 @@ class AppConfig(BaseModel):
 
 
 # Create the default configuration
-config = AppConfig() 
+config = AppConfig()
+
+# Logging configuration
+log_level = "DEBUG"  # Change this to "DEBUG" for troubleshooting 

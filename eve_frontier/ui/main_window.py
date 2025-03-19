@@ -100,10 +100,25 @@ class MainWindow(QMainWindow):
     def _create_tabs(self):
         """Create the main application tabs."""
         # Import tab classes here to avoid circular imports
-        # For now, create placeholder widgets
-        self._create_item_search_tab()
-        self._create_production_chain_tab()
-        self._create_market_data_tab()
+        from eve_frontier.ui.tabs import BlueprintBrowserTab
+        from eve_frontier.ui.tabs.production_chain import ProductionChainTab
+        from eve_frontier.ui.tabs.market_data import MarketDataTab
+        from eve_frontier.models.base import get_db
+        
+        # Get a database session
+        db = get_db()
+        
+        # Create Blueprint Browser tab
+        self.blueprint_browser_tab = BlueprintBrowserTab(db)
+        self.tab_widget.addTab(self.blueprint_browser_tab, "Blueprint Browser")
+        
+        # Create Production Chain tab
+        self.production_chain_tab = ProductionChainTab(db)
+        self.tab_widget.addTab(self.production_chain_tab, "Production Chain")
+        
+        # Create Market Data tab
+        self.market_data_tab = MarketDataTab(db)
+        self.tab_widget.addTab(self.market_data_tab, "Market Data")
         
         logger.debug("Tabs created")
     
@@ -126,46 +141,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(description)
         
         self.tab_widget.addTab(tab, "Item Search")
-    
-    def _create_production_chain_tab(self):
-        """Create the production chain tab."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        # Add a label explaining this is a placeholder
-        label = QLabel("Production Chain Tab - Placeholder")
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label)
-        
-        # Add a description
-        description = QLabel(
-            "This tab will display production chains for manufacturing items.\n"
-            "It will calculate costs, materials, and time required for production."
-        )
-        description.setAlignment(Qt.AlignCenter)
-        layout.addWidget(description)
-        
-        self.tab_widget.addTab(tab, "Production Chain")
-    
-    def _create_market_data_tab(self):
-        """Create the market data tab."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        # Add a label explaining this is a placeholder
-        label = QLabel("Market Data Tab - Placeholder")
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label)
-        
-        # Add a description
-        description = QLabel(
-            "This tab will provide market data analysis for items.\n"
-            "It will show prices, trading volumes, and profit margins."
-        )
-        description.setAlignment(Qt.AlignCenter)
-        layout.addWidget(description)
-        
-        self.tab_widget.addTab(tab, "Market Data")
     
     def _show_about_dialog(self):
         """Show the about dialog."""

@@ -6,7 +6,7 @@ for items in EVE Online.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Any
 from decimal import Decimal
 import datetime
 
@@ -14,6 +14,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from eve_frontier.models import Item, MarketData, MarketHistory, TradingHub, MarketOrder
+from eve_frontier.services.market_log_parser import MarketLogParser
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,64 @@ class MarketService:
             db: SQLAlchemy database session
         """
         self.db = db
-    
+        
+        # Initialize the market log parser
+        self.market_log_parser = MarketLogParser(
+            log_directory="data/csv/Marketlogs",
+            cache_directory="data/refined_market_data"
+        )
+        
+        # Load unified market data
+        self._unified_market_data = None
+        
+    def get_unified_market_data(self) -> Dict:
+        """
+        Get the unified market data.
+        This is a public accessor for the protected _load_unified_market_data method.
+        
+        Returns:
+            Dictionary containing unified market data
+        """
+        return self._load_unified_market_data()
+        
+    def _load_unified_market_data(self):
+        """Load unified market data if not already loaded."""
+        if self._unified_market_data is None:
+            logger.info("Loading unified market data")
+            # Try to load from cache first
+            try:
+                cached_data = self.market_log_parser.load_cached_data("unified_market_data")
+                
+                if cached_data:
+                    item_count = len(cached_data.get('items', {}))
+                    trading_hub_count = len(cached_data.get('trading_hubs', []))
+                    logger.info(f"Loaded cached market data: {item_count} items, {trading_hub_count} trading hubs")
+                    
+                    # Log a few item IDs for debugging
+                    item_ids = list(cached_data.get('items', {}).keys())
+                    logger.debug(f"Available item IDs: {item_ids[:10]}...")
+                    
+                    # Log trading hub info
+                    for i, hub in enumerate(cached_data.get('trading_hubs', [])[:5]):
+                        logger.debug(f"Trading hub {i+1}: ID={hub.get('id')}, Name={hub.get('name')}")
+                    
+                    self._unified_market_data = cached_data
+                else:
+                    logger.info("No cached market data found, parsing all logs")
+                    # Parse all market logs
+                    self._unified_market_data = self.market_log_parser.parse_all_logs()
+                    
+                    if self._unified_market_data:
+                        item_count = len(self._unified_market_data.get('items', {}))
+                        logger.info(f"Parsed {item_count} items from market logs")
+                    else:
+                        logger.warning("Failed to parse market logs, no data available")
+            except Exception as e:
+                logger.error(f"Error loading unified market data: {e}", exc_info=True)
+                return None
+                
+        return self._unified_market_data
+            
     def get_market_data(
         self, 
         item_id: int, 
@@ -51,9 +109,9 @@ class MarketService:
         Returns:
             List of MarketData objects
         """
-        logger.debug(f"Getting market data for item_id={item_id}, region_id={region_id}, system_id={system_id}")
+        logger.info(f"Getting market data for item_id={item_id}, order_type={order_type}, region_id={region_id}, system_id={system_id}")
         
-        # Build the base query
+        # First try to get data from the database
         query = self.db.query(MarketData).filter(MarketData.item_id == item_id)
         
         # Add filters
@@ -79,89 +137,292 @@ class MarketService:
         # Limit the number of results
         query = query.limit(limit)
         
-        # Execute the query
-        results = query.all()
-        logger.debug(f"Found {len(results)} market orders")
+        try:
+            # Execute the query
+            db_results = query.all()
+            
+            # If we have results from the database, return them
+            if db_results:
+                logger.info(f"Found {len(db_results)} market orders in database")
+                return db_results
+        except Exception as e:
+            logger.error(f"Database query error: {e}", exc_info=True)
         
-        return results
+        # Otherwise, try to get data from market logs
+        logger.info(f"No database results for item_id={item_id}, using market logs")
+        try:
+            # Load unified market data
+            market_data = self._load_unified_market_data()
+            if not market_data:
+                logger.error("Failed to load unified market data")
+                return []
+                
+            # Log what items we have data for
+            available_items = list(market_data.get('items', {}).keys())
+            logger.debug(f"Unified market data contains {len(available_items)} items: {available_items[:10]}...")
+            
+            # Get orders for this item
+            str_item_id = str(item_id)
+            item_data = market_data.get('items', {}).get(str_item_id)
+            
+            if not item_data:
+                logger.warning(f"No market data found for item_id={item_id} in unified market data")
+                return []
+                
+            logger.debug(f"Found item data for {item_data.get('name', 'unknown')} (ID: {item_id})")
+            
+            # Get orders based on order type
+            orders = []
+            if order_type == "buy" or order_type == "all":
+                buy_orders = item_data.get('buy_orders', [])
+                logger.debug(f"Found {len(buy_orders)} buy orders for item_id={item_id}")
+                
+                # Filter by region if specified
+                if region_id is not None:
+                    buy_orders = [o for o in buy_orders if o.get('region_id') == region_id]
+                    logger.debug(f"After region filter: {len(buy_orders)} buy orders remain")
+                
+                # Filter by system if specified
+                if system_id is not None:
+                    buy_orders = [o for o in buy_orders if o.get('solar_system_id') == system_id]
+                    logger.debug(f"After system filter: {len(buy_orders)} buy orders remain")
+                
+                # Log details of first few orders for debugging
+                for i, order in enumerate(buy_orders[:3]):
+                    logger.debug(f"Buy order {i+1}: ID={order.get('order_id')}, Price={order.get('price')}, "
+                                 f"Volume={order.get('volume_remaining')}, Station={order.get('station_id')}")
+                
+                # Convert to MarketData objects
+                for order in buy_orders[:limit]:
+                    try:
+                        issue_date = order.get('issue_date', '')
+                        # Handle potential format issues with the timestamp
+                        try:
+                            if 'T' not in issue_date and ' ' in issue_date:
+                                timestamp = datetime.datetime.fromisoformat(issue_date.replace(' ', 'T'))
+                            else:
+                                timestamp = datetime.datetime.fromisoformat(issue_date)
+                        except ValueError:
+                            logger.warning(f"Invalid date format: {issue_date}, using current time")
+                            timestamp = datetime.datetime.utcnow()
+                            
+                        market_data = MarketData(
+                            id=order.get('order_id', 0),  # Using order_id as a placeholder ID
+                            item_id=item_id,
+                            station_id=order.get('station_id'),
+                            buy_price=order.get('price'),
+                            sell_price=None,
+                            buy_volume=order.get('volume_remaining'),
+                            sell_volume=None,
+                            timestamp=timestamp
+                        )
+                        orders.append(market_data)
+                    except Exception as e:
+                        logger.warning(f"Error creating MarketData object from buy order: {e}")
+            
+            if order_type == "sell" or order_type == "all":
+                sell_orders = item_data.get('sell_orders', [])
+                logger.debug(f"Found {len(sell_orders)} sell orders for item_id={item_id}")
+                
+                # Filter by region if specified
+                if region_id is not None:
+                    sell_orders = [o for o in sell_orders if o.get('region_id') == region_id]
+                    logger.debug(f"After region filter: {len(sell_orders)} sell orders remain")
+                
+                # Filter by system if specified
+                if system_id is not None:
+                    sell_orders = [o for o in sell_orders if o.get('solar_system_id') == system_id]
+                    logger.debug(f"After system filter: {len(sell_orders)} sell orders remain")
+                
+                # Log details of first few orders for debugging
+                for i, order in enumerate(sell_orders[:3]):
+                    logger.debug(f"Sell order {i+1}: ID={order.get('order_id')}, Price={order.get('price')}, "
+                                 f"Volume={order.get('volume_remaining')}, Station={order.get('station_id')}")
+                
+                # Convert to MarketData objects
+                for order in sell_orders[:limit]:
+                    try:
+                        issue_date = order.get('issue_date', '')
+                        # Handle potential format issues with the timestamp
+                        try:
+                            if 'T' not in issue_date and ' ' in issue_date:
+                                timestamp = datetime.datetime.fromisoformat(issue_date.replace(' ', 'T'))
+                            else:
+                                timestamp = datetime.datetime.fromisoformat(issue_date)
+                        except ValueError:
+                            logger.warning(f"Invalid date format: {issue_date}, using current time")
+                            timestamp = datetime.datetime.utcnow()
+                            
+                        market_data = MarketData(
+                            id=order.get('order_id', 0),  # Using order_id as a placeholder ID
+                            item_id=item_id,
+                            station_id=order.get('station_id'),
+                            buy_price=None,
+                            sell_price=order.get('price'),
+                            buy_volume=None,
+                            sell_volume=order.get('volume_remaining'),
+                            timestamp=timestamp
+                        )
+                        orders.append(market_data)
+                    except Exception as e:
+                        logger.warning(f"Error creating MarketData object from sell order: {e}")
+            
+            # Sort and limit
+            if order_type == "buy":
+                orders.sort(key=lambda o: o.buy_price or 0, reverse=True)
+            elif order_type == "sell":
+                orders.sort(key=lambda o: o.sell_price or float('inf'))
+            
+            orders = orders[:limit]
+            
+            logger.info(f"Returning {len(orders)} market orders from logs for item_id={item_id}")
+            return orders
+            
+        except Exception as e:
+            logger.error(f"Error getting market data from logs: {e}", exc_info=True)
+            return []
     
     def get_market_statistics(
         self, 
         item_id: int, 
-        region_id: Optional[int] = None,
-        system_id: Optional[int] = None,
+        region_id: Optional[int] = None, 
         days: int = 7
-    ) -> Dict[str, Union[Decimal, int, float]]:
+    ) -> Dict[str, Any]:
         """
-        Get market statistics for an item.
+        Calculate market statistics for an item.
         
         Args:
             item_id: ID of the item
             region_id: Optional ID of the region to filter by
-            system_id: Optional ID of the solar system to filter by
-            days: Number of days to include in the statistics
+            days: Number of days of history to include
             
         Returns:
             Dictionary with market statistics
         """
-        logger.debug(f"Getting market statistics for item_id={item_id}, region_id={region_id}, days={days}")
+        try:
+            # Calculate cutoff date
+            cutoff_date = datetime.datetime.now() - datetime.timedelta(days=days)
+            system_id = None  # Replace with system filtering if needed
+            
+            # Get market data
+            sell_orders = self.get_market_data(
+                item_id=item_id,
+                region_id=region_id,
+                system_id=system_id,
+                order_type="sell",
+                limit=100
+            )
+            
+            buy_orders = self.get_market_data(
+                item_id=item_id,
+                region_id=region_id,
+                system_id=system_id,
+                order_type="buy",
+                limit=100
+            )
+            
+            # Get historical data from database
+            history = self._get_market_history(
+                item_id=item_id,
+                region_id=region_id,
+                cutoff_date=cutoff_date
+            )
+            
+            # If we don't have historical data, use the market logs directly
+            if not history:
+                # Try to get statistics from unified market data
+                market_data = self._load_unified_market_data()
+                
+                str_item_id = str(item_id)
+                item_data = market_data.get('items', {}).get(str_item_id, {})
+                
+                if item_data:
+                    stats = item_data.get('statistics', {})
+                    min_sell_price = stats.get('min_sell_price', 0) or 0
+                    max_buy_price = stats.get('max_buy_price', 0) or 0
+                    spread = (min_sell_price - max_buy_price) if min_sell_price > 0 and max_buy_price > 0 else 0
+                    
+                    # Avoid division by zero
+                    spread_percentage = 0
+                    if min_sell_price > 0:
+                        spread_percentage = (spread / min_sell_price) * 100
+                    
+                    return {
+                        'item_id': item_id,
+                        'region_id': region_id,
+                        'min_sell_price': min_sell_price,
+                        'max_buy_price': max_buy_price,
+                        'sell_price': min_sell_price,  # Add sell_price for consistency
+                        'buy_price': max_buy_price,    # Add buy_price for consistency
+                        'spread': spread,
+                        'spread_percentage': spread_percentage,
+                        'daily_volume': stats.get('total_sell_volume', 0) / max(1, days),
+                        'avg_daily_volume': stats.get('total_sell_volume', 0) / max(1, days),
+                        'avg_price': min_sell_price,  # No real average available
+                        'price_trend': 0.0,  # No historical data to calculate trend
+                        'sell_order_volume': stats.get('total_sell_volume', 0),
+                        'buy_order_volume': stats.get('total_buy_volume', 0),
+                        'days_analyzed': days,
+                    }
+            
+            # Calculate statistics from the data we have
+            min_sell = min([order.sell_price for order in sell_orders if order.sell_price]) if sell_orders else Decimal("0")
+            max_buy = max([order.buy_price for order in buy_orders if order.buy_price]) if buy_orders else Decimal("0")
+            spread = min_sell - max_buy if min_sell > 0 and max_buy > 0 else Decimal("0")
+            
+            # Avoid division by zero
+            spread_percentage = Decimal("0")
+            if min_sell > 0:
+                spread_percentage = (spread / min_sell * 100)
+            
+            # Historical volume and price data
+            avg_daily_volume = sum([h.volume for h in history]) / max(1, len(history)) if history else 0
+            avg_price = sum([h.average_price for h in history]) / max(1, len(history)) if history else (min_sell or 0)
+            price_trend = self._calculate_price_trend(history) if history else 0.0
+            
+            # Total volume in sell/buy orders
+            sell_volume = sum([order.sell_volume for order in sell_orders if order.sell_volume]) if sell_orders else 0
+            buy_volume = sum([order.buy_volume for order in buy_orders if order.buy_volume]) if buy_orders else 0
+            
+            return {
+                "item_id": item_id,
+                "region_id": region_id,
+                "min_sell_price": float(min_sell),
+                "max_buy_price": float(max_buy),
+                "sell_price": float(min_sell),  # Add sell_price for consistency
+                "buy_price": float(max_buy),    # Add buy_price for consistency
+                "spread": float(spread),
+                "spread_percentage": float(spread_percentage),
+                "daily_volume": avg_daily_volume,  # Add daily_volume for consistency
+                "avg_daily_volume": avg_daily_volume,
+                "avg_price": float(avg_price),
+                "price_trend": price_trend,
+                "sell_order_volume": sell_volume,
+                "buy_order_volume": buy_volume,
+                "days_analyzed": days,
+            }
         
-        # Calculate the cutoff date
-        cutoff_date = datetime.datetime.utcnow() - datetime.timedelta(days=days)
-        
-        # Get market data
-        sell_orders = self.get_market_data(
-            item_id=item_id,
-            region_id=region_id,
-            system_id=system_id,
-            order_type="sell",
-            limit=100
-        )
-        
-        buy_orders = self.get_market_data(
-            item_id=item_id,
-            region_id=region_id,
-            system_id=system_id,
-            order_type="buy",
-            limit=100
-        )
-        
-        # Get historical data
-        history = self._get_market_history(
-            item_id=item_id,
-            region_id=region_id,
-            cutoff_date=cutoff_date
-        )
-        
-        # Calculate statistics
-        min_sell = min([order.sell_price for order in sell_orders]) if sell_orders else Decimal("0")
-        max_buy = max([order.buy_price for order in buy_orders]) if buy_orders else Decimal("0")
-        spread = min_sell - max_buy if min_sell > 0 and max_buy > 0 else Decimal("0")
-        spread_percentage = (spread / min_sell * 100) if min_sell > 0 else Decimal("0")
-        
-        # Historical volume and price data
-        avg_daily_volume = sum([h.volume for h in history]) / max(1, len(history))
-        avg_price = sum([h.average_price for h in history]) / max(1, len(history))
-        price_trend = self._calculate_price_trend(history)
-        
-        # Total volume in sell/buy orders
-        sell_volume = sum([order.sell_volume for order in sell_orders])
-        buy_volume = sum([order.buy_volume for order in buy_orders])
-        
-        return {
-            "item_id": item_id,
-            "region_id": region_id,
-            "min_sell_price": float(min_sell),
-            "max_buy_price": float(max_buy),
-            "spread": float(spread),
-            "spread_percentage": float(spread_percentage),
-            "avg_daily_volume": avg_daily_volume,
-            "avg_price": float(avg_price),
-            "price_trend": price_trend,
-            "sell_order_volume": sell_volume,
-            "buy_order_volume": buy_volume,
-            "days_analyzed": days,
-        }
+        except Exception as e:
+            logger.error(f"Error calculating market statistics: {e}", exc_info=True)
+            
+            # Return empty statistics with consistent field names
+            return {
+                "item_id": item_id,
+                "region_id": region_id,
+                "min_sell_price": 0.0,
+                "max_buy_price": 0.0,
+                "sell_price": 0.0,
+                "buy_price": 0.0,
+                "spread": 0.0,
+                "spread_percentage": 0.0,
+                "daily_volume": 0,
+                "avg_daily_volume": 0,
+                "avg_price": 0.0,
+                "price_trend": 0.0,
+                "sell_order_volume": 0,
+                "buy_order_volume": 0,
+                "days_analyzed": days,
+            }
     
     def _get_market_history(
         self, 
@@ -234,14 +495,36 @@ class MarketService:
         # Convert to a -1.0 to 1.0 scale
         return max(-1.0, min(1.0, correlation))
     
-    def get_trading_hubs(self) -> List[TradingHub]:
+    def get_trading_hubs(self) -> List[Union[TradingHub, Dict[str, Any]]]:
         """
         Get a list of trading hubs.
         
         Returns:
-            List of TradingHub objects
+            List of TradingHub objects or dictionaries with hub information
         """
-        return self.db.query(TradingHub).order_by(TradingHub.name).all()
+        # First try to get trading hubs from the database
+        db_hubs = self.db.query(TradingHub).order_by(TradingHub.name).all()
+        
+        if db_hubs:
+            logger.info(f"Found {len(db_hubs)} trading hubs in database")
+            return db_hubs
+        
+        # If no hubs in database, generate from market logs
+        try:
+            logger.info("No trading hubs in database, getting from market logs")
+            # Get trading hubs directly from the MarketLogParser
+            hubs = self.market_log_parser.get_trading_hubs()
+            
+            if hubs:
+                logger.info(f"Found {len(hubs)} trading hubs in market logs")
+                return hubs
+            else:
+                logger.warning("No trading hubs found in market logs")
+                return []
+            
+        except Exception as e:
+            logger.error(f"Error getting trading hubs from logs: {e}", exc_info=True)
+            return []
     
     def analyze_potential_trades(
         self, 
@@ -274,4 +557,52 @@ class MarketService:
         # 4. Sort by profit or ROI
         
         # Return empty list for now
-        return [] 
+        return []
+    
+    def reload_market_data(self) -> bool:
+        """
+        Force reload market data from log files.
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        logger.info("Forcing reload of market data from log files")
+        try:
+            # Clear the cache and reload from log files
+            unified_data = self.market_log_parser.clear_cache_and_reload()
+            
+            # Update our in-memory cache
+            self._unified_market_data = unified_data
+            
+            # Log some statistics
+            item_count = len(unified_data.get('items', {}))
+            hub_count = len(unified_data.get('trading_hubs', []))
+            logger.info(f"Reloaded market data: {item_count} items, {hub_count} trading hubs")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Failed to reload market data: {e}", exc_info=True)
+            return False
+    
+    def batch_get_station_names(self, station_ids: List[int]) -> Dict[int, str]:
+        """
+        Get multiple station names at once.
+        
+        Args:
+            station_ids: List of station IDs to get names for
+            
+        Returns:
+            Dictionary mapping station IDs to their names
+        """
+        if not self.market_log_parser:
+            logger.warning("Market log parser not initialized when batch getting station names")
+            return {sid: f"Station {sid}" for sid in station_ids}
+            
+        try:
+            result = {}
+            for station_id in station_ids:
+                result[station_id] = self.market_log_parser.get_station_name(station_id)
+            return result
+        except Exception as e:
+            logger.error(f"Error batch getting station names: {e}", exc_info=True)
+            return {sid: f"Station {sid}" for sid in station_ids} 

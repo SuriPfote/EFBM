@@ -37,6 +37,10 @@ EVE Frontier Blueprint Miracle is a GUI application for analyzing EVE Frontier b
 - Calculate profit margins for manufactured items
 - Track price history
 - Set custom prices for items
+- Analyze manufacturing profitability with the Profitability Analyzer Widget
+- Filter items by profitability threshold
+- Sort profitable items by margin or absolute profit
+- Identify most profitable manufacturing opportunities at a glance
 
 ### Data Management
 
@@ -78,6 +82,10 @@ EVE Frontier Blueprint Miracle is a GUI application for analyzing EVE Frontier b
 - Custom price management
 - Profit calculation display
 - Price history visualization
+- Profitability Analyzer Widget for identifying manufacturing opportunities
+- Material Efficiency level adjustment
+- Profit margin threshold filtering
+- Results table with detailed profitability metrics
 
 ## Additional Features
 
@@ -94,6 +102,7 @@ EVE Frontier Blueprint Miracle is a GUI application for analyzing EVE Frontier b
 - Export material lists to CSV
 - Export cost calculations to CSV
 - Export custom price lists
+- Export profitability analysis results to CSV
 
 ### User Preferences
 
@@ -101,6 +110,7 @@ EVE Frontier Blueprint Miracle is a GUI application for analyzing EVE Frontier b
 - Set default stations for price lookups
 - Configure default margin percentages
 - Set auto-refresh options for market data
+- Define default Material Efficiency level for calculations
 
 ### Troubleshooting Tools
 

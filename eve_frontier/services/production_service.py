@@ -149,22 +149,32 @@ class ProductionService:
         
         # Check if this is a manufacturable item
         blueprint = self._find_manufacturing_blueprint(item_id)
-        if not blueprint and max_depth > 0:
-            logger.info(f"No manufacturing blueprint found for item_id={item_id}")
-            # Return a node with no manufacturing details
+        
+        # If no blueprint found or we hit max depth, return a market-based node
+        if not blueprint or max_depth <= 0:
+            if not blueprint:
+                logger.info(f"No manufacturing blueprint found for item_id={item_id}")
+            
+            # Get market data for this item from MarketService
+            from eve_frontier.services.market_service import MarketService
+            market_service = MarketService(self.db)
+            market_stats = market_service.get_market_statistics(item_id, days=1)
+            
+            buy_price = Decimal(str(market_stats.get('buy_price', 0))) if market_stats else Decimal('0')
+            sell_price = Decimal(str(market_stats.get('sell_price', 0))) if market_stats else Decimal('0')
+            
+            # Return a node with market data
             return ProductionChainNode(
                 item_id=item_id,
                 item_name=item.name,
                 quantity=quantity,
-                # No blueprint or activity as this is a "buy" item
                 blueprint_id=None,
                 activity_id=None,
                 activity_name=None,
                 materials=[],
-                # These would be filled in with actual market data in a real implementation
-                buy_price=Decimal("0"),
-                sell_price=Decimal("0"),
-                production_cost=None,
+                buy_price=buy_price,
+                sell_price=sell_price,
+                production_cost=buy_price,  # Use buy price as production cost for raw materials
                 time_required=None,
             )
         
@@ -215,21 +225,39 @@ class ProductionService:
                     
                     if material_node:
                         materials_nodes.append(material_node)
+
+        # Get market data for this item
+        from eve_frontier.services.market_service import MarketService
+        market_service = MarketService(self.db)
+        market_stats = market_service.get_market_statistics(item_id, days=1)
+        
+        buy_price = Decimal(str(market_stats.get('buy_price', 0))) if market_stats else Decimal('0')
+        sell_price = Decimal(str(market_stats.get('sell_price', 0))) if market_stats else Decimal('0')
+        
+        # Calculate production cost based on material costs
+        production_cost = Decimal('0')
+        if materials_nodes:
+            for material_node in materials_nodes:
+                # Use the material's production cost if available, otherwise use market buy price
+                material_cost = material_node.production_cost or material_node.buy_price or Decimal('0')
+                production_cost += material_cost * Decimal(material_node.quantity)
+        else:
+            # If no materials (or they couldn't be processed), use market price
+            production_cost = buy_price * Decimal(quantity)
         
         # Create and return the production chain node
         return ProductionChainNode(
             item_id=item_id,
             item_name=item.name,
             quantity=quantity,
-            blueprint_id=blueprint.id,
-            activity_id=manufacturing_activity.id,
-            activity_name=manufacturing_activity.activity_name,
+            blueprint_id=blueprint.id if blueprint else None,
+            activity_id=manufacturing_activity.id if manufacturing_activity else None,
+            activity_name=manufacturing_activity.activity_name if manufacturing_activity else None,
             materials=materials_nodes,
-            # These would be filled with actual market data in a real implementation
-            buy_price=Decimal("0"),
-            sell_price=Decimal("0"),
-            production_cost=Decimal("0"),
-            time_required=adjusted_time,
+            buy_price=buy_price,
+            sell_price=sell_price,
+            production_cost=production_cost / Decimal(quantity) if quantity > 0 else Decimal('0'),
+            time_required=adjusted_time if manufacturing_activity else None,
         )
     
     def _find_manufacturing_blueprint(self, product_id: int) -> Optional[Blueprint]:
@@ -242,8 +270,19 @@ class ProductionService:
         Returns:
             Blueprint object if found, None otherwise
         """
-        # This is a simplified version
-        # In reality, you'd likely need to join with blueprint products
+        # First, check if any blueprint products exist for this item
+        product_count = (
+            self.db.query(BlueprintProduct)
+            .filter(BlueprintProduct.product_id == product_id)
+            .count()
+        )
+        
+        logger.debug(f"Found {product_count} blueprint products for product_id={product_id}")
+        
+        if product_count == 0:
+            return None
+        
+        # If products exist, find the blueprint
         blueprint = (
             self.db.query(Blueprint)
             .join(BlueprintProduct, Blueprint.id == BlueprintProduct.blueprint_id)
@@ -252,6 +291,12 @@ class ProductionService:
             )
             .first()
         )
+        
+        if blueprint:
+            logger.debug(f"Found blueprint ID {blueprint.id} ({blueprint.name}) for product_id={product_id}")
+        else:
+            logger.debug(f"No blueprint found for product_id={product_id}")
+        
         return blueprint
     
     def _get_manufacturing_activity(self, blueprint_id: int) -> Optional[BlueprintActivity]:
@@ -268,7 +313,7 @@ class ProductionService:
             self.db.query(BlueprintActivity)
             .filter(
                 BlueprintActivity.blueprint_id == blueprint_id,
-                BlueprintActivity.activity_name == "Manufacturing"
+                BlueprintActivity.activity_name == "manufacturing"
             )
             .first()
         )
@@ -342,22 +387,77 @@ class ProductionService:
         Returns:
             Dictionary with profit information
         """
-        # This is a placeholder implementation
-        # In a real implementation, you would:
-        # 1. Get the production chain
-        # 2. Get market prices for all materials
-        # 3. Calculate total material cost
-        # 4. Get market price for the final product
-        # 5. Calculate profit
-        
-        # Placeholder result
-        return {
-            "item_id": item_id,
-            "quantity": quantity,
-            "materials_cost": Decimal("1000.00"),
-            "production_time": 3600,  # seconds
-            "market_price": Decimal("1500.00"),
-            "profit": Decimal("500.00"),
-            "profit_per_hour": Decimal("500.00"),
-            "components": [] if include_components else None,
-        } 
+        try:
+            # Get market data for the item
+            from eve_frontier.services.market_service import MarketService
+            market_service = MarketService(self.db)
+            
+            # Get market statistics for this item
+            market_stats = market_service.get_market_statistics(item_id, days=1)
+            if not market_stats or not market_stats.get('sell_price'):
+                logger.warning(f"No market data for item {item_id}")
+                return None
+            
+            # Get the market price (lowest sell price)
+            market_price = Decimal(str(market_stats.get('sell_price', 0)))
+            if market_price <= 0:
+                logger.warning(f"Item {item_id} has zero or negative market price")
+                return None
+            
+            # Get the manufacturing details for the item
+            production_chain = self.get_manufacturing_details(
+                item_id=item_id,
+                quantity=quantity,
+                me_level=me_level,
+                max_depth=3 if include_components else 1
+            )
+            
+            if not production_chain:
+                logger.warning(f"No production chain found for item {item_id}")
+                return None
+            
+            # Calculate total production cost
+            production_cost = production_chain.total_production_cost()
+            if not production_cost:
+                logger.warning(f"Could not calculate production cost for item {item_id}")
+                return None
+            
+            # Calculate profit
+            profit = market_price * quantity - production_cost
+            
+            # Calculate profit margin
+            profit_margin = (profit / production_cost) * 100 if production_cost > 0 else 0
+            
+            # Get production time
+            production_time = production_chain.time_required or 0
+            
+            # Calculate profit per hour
+            profit_per_hour = (profit / Decimal(production_time)) * 3600 if production_time > 0 else 0
+            
+            # Get daily volume from market stats
+            daily_volume = market_stats.get('daily_volume', 0)
+            
+            # Create result dictionary
+            result = {
+                "item_id": item_id,
+                "quantity": quantity,
+                "production_cost": production_cost,
+                "market_price": market_price,
+                "profit": profit,
+                "profit_margin": float(profit_margin),
+                "profit_per_hour": profit_per_hour,
+                "production_time": production_time,
+                "daily_volume": daily_volume,
+            }
+            
+            # Add components if requested
+            if include_components:
+                result["components"] = production_chain.to_dict().get('materials', [])
+            
+            logger.debug(f"Profit calculation for item {item_id}: cost={production_cost}, price={market_price}, profit={profit}, margin={profit_margin}%")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error calculating production profit for item {item_id}: {e}", exc_info=True)
+            return None 

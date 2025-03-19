@@ -8,13 +8,29 @@ EVE Frontier Blueprint Miracle is a desktop application that helps EVE Online pl
 
 ## Current State
 
-The application is currently in version 0.1.0, with the following components implemented:
+The application is currently in development, with the following components implemented:
 
 - Core service layer with data loading, searching, production chain analysis, and market data processing
 - Database models for items, blueprints, and market data
-- Basic UI framework with placeholder tabs for the main functionality
+- Basic UI framework with the Blueprint Browser tab fully functional
+- Market Data tab with price history and order book visualization
+- Profitability Analyzer widget for identifying profitable manufacturing opportunities
 - Comprehensive test suite for the service layer
 - GitHub integration with foundation branch to preserve baseline implementation
+
+The Blueprint Browser tab allows users to:
+- Search for blueprints by name
+- Filter by manufacturing activity type
+- View detailed blueprint information including:
+  - Products produced by the blueprint
+  - Materials required for manufacturing
+  - Manufacturing activities and times
+
+The Market Data tab allows users to:
+- Search for items and view their market data
+- View buy and sell orders in a detailed order book
+- Analyze price history with charts
+- Identify profitable manufacturing opportunities with the Profitability Analyzer
 
 See the [CHANGELOG.md](CHANGELOG.md) for detailed information about project history.
 

@@ -10,5 +10,17 @@ Main components:
 """
 
 from .main_window import MainWindow
+from eve_frontier.ui.tabs.blueprint_browser import BlueprintBrowserTab
+from eve_frontier.ui.tabs.production_chain import ProductionChainTab
+from eve_frontier.ui.tabs.market_data import MarketDataTab
 
-__all__ = ['MainWindow'] 
+# Import custom widgets
+from eve_frontier.ui.widgets.profitability_analyzer_widget import ProfitabilityAnalyzerWidget
+
+__all__ = [
+    'MainWindow',
+    'BlueprintBrowserTab',
+    'ProductionChainTab',
+    'MarketDataTab',
+    'ProfitabilityAnalyzerWidget'
+] 
